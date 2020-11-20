@@ -23,14 +23,13 @@ from pyod.utils.example import visualize
 from pyod.models.combination import aom, moa, average, maximization
 from pyod.utils.utility import standardizer
 
-contamination = 0.1
-n_train = 200
-n_test = 100
 
-X_train, y_train, X_test, y_test = generate_data(n_train=n_train, n_test=n_test, contamination=contamination)
-
+#n_clf = 25
+#k_list = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200, 500, 1000, 3000, 5000, 10000]
 n_clf = 20
 k_list = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200]
+#n_clf = 6
+#k_list = [80, 100, 200, 300, 400, 600]
 
 # -------------------------------------------
 # Preprocess train file for python processing by
@@ -38,7 +37,12 @@ k_list = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160,
 # -------------------------------------------
 CS = []
 Mem = []
-with open("DLA_do_object_1.csv", "r") as file:
+training_data = "train.txt"
+test_data = "test.txt"
+#training_data = "DLA_do_object_1.csv"
+#test_data = "DLA_OBJ_ITER_1.csv"
+
+with open(training_data, "r") as file:
     # Skip non data lines
     for _ in range(1):
         next(file)
@@ -65,6 +69,8 @@ with open("DLA_do_object_1.csv", "r") as file:
 
 file.close()
 """
+# Data Validation
+#
 for i in range(100):
     print(diff_code_data)
 # Data sanity validation
@@ -78,7 +84,7 @@ for i in range(100):
 # -------------------------------------------
 CS_t = []
 Mem_t = []
-with open("DLA_OBJ_ITER_1.csv", "r") as file:
+with open(test_data, "r") as file:
     # Skip non data lines
     for _ in range(1):
         next(file)
@@ -124,8 +130,8 @@ plot.xlabel('Normalized Code Segment:Instruction Pointers')
 plot.ylabel('Normalized Memory Access Addresses')
 plot.yscale('linear')
 plot.savefig('Feature.png', dpi=300, bbox_inches='tight')
-plot.show()
-exit()
+#plot.show()
+#exit()
 
 d_train_norm, d_test_norm = standardizer(d_train, d_test)
 train_scores = np.zeros([d_train.shape[0], n_clf])
@@ -145,8 +151,12 @@ test_scores = np.zeros([d_test.shape[0], n_clf])
 
 dy_train=[]
 dy_test=[]
+#DMAX
+#27333556840
+
 for i in range(len(Mem)):
-    if Mem[i] > 34299489320:
+    #if Mem[i] > 34299489320:
+    if Mem_t[i] > 24299489320:
         dy_train.append(1.)
     else:
         dy_train.append(0.)
@@ -155,29 +165,45 @@ for i in range(len(Mem)):
 #dy_train_t = np.ones(570)
 #dy_train = np.r_[dy_train_f, dy_train_t]
 
+
 for i in range(len(Mem_t)):
-    if Mem_t[i] > 34299489320:
+    #if Mem_t[i] > 34299489320:
+    if Mem_t[i] > 24299489320:
         dy_test.append(1.)
     else:
         dy_test.append(0.)
 
-#dy_test_t = np.ones(len(d_test) - 570)
-#dy_test_f = np.zeros(570)
-#dy_test = np.r_[dy_test_t, dy_test_f]
-#print(y_test)
-#print(d_train)
-
-
 print('Combining {n_clf} kNN detectors'.format(n_clf=n_clf))
+clf = []
 
+point = 2000 # you can pick any data point for this analysis (0..50000)
+point_analysis = []
+clf_name = 'KNN'
 for i in range(n_clf):
     k = k_list[i]
-    clf_name = 'KNN'
-    clf = KNN(n_neighbors=k, method='largest')
-    #clf.fit(X_train)
-    clf.fit(d_train_norm)
-    train_scores[:, i] = clf.decision_scores_
-    test_scores[:, i] = clf.decision_function(d_test_norm)
+    print(i,k)
+    clf_r = KNN(n_neighbors=k, method='largest')
+    clf.append(clf_r)
+    clf[i].fit(d_train_norm)
+    train_scores[:, i] = clf[i].decision_scores_
+    test_scores[:, i] = clf[i].decision_function(d_test_norm)
+    point_analysis.append(clf[i].decision_scores_[point])
+
+clf_s = KNN()
+clf_s.fit(d_train)
+
+print(point_analysis)
+#
+# https://towardsdatascience.com/time-series-of-price-anomaly-detection-13586cd5ff46
+# Susan Li's Blog on Time series anomaly detection
+#
+fig, ax = plot.subplots(figsize=(10,6))
+ax.plot(k_list, point_analysis)
+plot.xlabel('Number of Clusters')
+plot.ylabel('Score')
+plot.title('Elbow Curve')
+plot.savefig('Elbow.png', dpi=300, bbox_inches='tight')
+plot.show()
 
 train_scores_norm, test_scores_norm = standardizer(train_scores, test_scores)
 comb_by_average = average(test_scores_norm)
@@ -190,29 +216,23 @@ evaluate_print('Combination by Maximization', dy_test, comb_by_maximization)
 evaluate_print('Combination by AOM', dy_test, comb_by_aom)
 evaluate_print('Combination by MOA', dy_test, comb_by_moa)
 
-# get the prediction labels and outlier scores of the training data
-#y_train_pred = clf.labels_  # binary labels (0: inliers, 1: outliers)
-#y_train_scores = clf.decision_scores_  # raw outlier scores
-dy_train_pred = clf.labels_  # binary labels (0: inliers, 1: outliers)
-dy_train_scores = clf.decision_scores_  # raw outlier scores
+
+dy_train_pred = clf_s.labels_ 
+dy_train_scores = clf_s.decision_scores_ 
 
 # get the prediction on the test data
-#y_test_pred = clf.predict(X_test)  # outlier labels (0 or 1)
-dy_test_pred = clf.predict(d_test)  # outlier labels (0 or 1)
-#y_test_scores = clf.decision_function(X_test)  # outlier scores
-dy_test_scores = clf.decision_function(d_test)  # outlier scores
+dy_test_pred = clf_s.predict(d_test) 
+dy_test_scores = clf_s.decision_function(d_test) 
 
+
+print(dy_train_scores)
 
 from pyod.utils.data import evaluate_print
 # evaluate and print the results
 print("\nOn Training Data:")
-#evaluate_print(clf_name, y_train, y_train_scores)
 evaluate_print(clf_name, dy_train, dy_train_scores)
 print("\nOn Test Data:")
-#evaluate_print(clf_name, y_test, y_test_scores)
 evaluate_print(clf_name, dy_test, dy_test_scores)
 
-#visualize(clf_name, X_train, y_train, X_test, y_test, y_train_pred,
-#              y_test_pred, show_figure=True, save_figure=True)
 visualize(clf_name, d_train, dy_train, d_test, dy_test, dy_train_pred,
               dy_test_pred, show_figure=True, save_figure=True)
