@@ -37,8 +37,8 @@ k_list = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160,
 # -------------------------------------------
 CS = []
 Mem = []
-training_data = "train.txt"
-test_data = "test.txt"
+training_data = "train4.txt"
+test_data = "test4.txt"
 #training_data = "DLA_do_object_1.csv"
 #test_data = "DLA_OBJ_ITER_1.csv"
 
@@ -123,6 +123,7 @@ feature_2_train = d_train[:, [1]].reshape(-1,1)
 feature_1_test  = d_test[:, [0]].reshape(-1,1)
 feature_2_test  = d_test[:, [1]].reshape(-1,1)
 
+"""
 #scatter plot
 plot.scatter(feature_1_train,feature_2_train)
 plot.scatter(feature_1_test,feature_2_test)
@@ -151,24 +152,24 @@ test_scores = np.zeros([d_test.shape[0], n_clf])
 
 dy_train=[]
 dy_test=[]
-#DMAX
-#27333556840
+#
+# DMAX
+# This is to label data as outlier for training... 
+#
+DMAX_OUTLIER_50k = 24299489320
+DMAX_OUTLIER_1M = 34299489320:
 
 for i in range(len(Mem)):
-    #if Mem[i] > 34299489320:
-    if Mem_t[i] > 24299489320:
+    #if Mem[i] > DMAX_OUTLIER_1M:
+    if Mem_t[i] > DMAX_OUTLIER_50k:
         dy_train.append(1.)
     else:
         dy_train.append(0.)
 
-#dy_train_f = np.zeros(len(d_train) - 570)
-#dy_train_t = np.ones(570)
-#dy_train = np.r_[dy_train_f, dy_train_t]
-
 
 for i in range(len(Mem_t)):
-    #if Mem_t[i] > 34299489320:
-    if Mem_t[i] > 24299489320:
+    #if Mem_t[i] > DMAX_OUTLIER_1M:
+    if Mem_t[i] > DMAX_OUTLIER_50k:
         dy_test.append(1.)
     else:
         dy_test.append(0.)
@@ -236,3 +237,212 @@ evaluate_print(clf_name, dy_test, dy_test_scores)
 
 visualize(clf_name, d_train, dy_train, d_test, dy_test, dy_train_pred,
               dy_test_pred, show_figure=True, save_figure=True)
+
+"""
+##################
+# LSTM - PyTorch
+# https://stackabuse.com/time-series-prediction-using-lstm-with-pytorch-in-python/
+# Used above link to learn LSTM-RNN using pyTorch
+##################
+import torch
+import torch.nn as nn
+import pandas as pd
+
+
+#
+# Plotting Memory Access (JVM Running in 2 states, Steady state (Train), Terminating (Test)
+#
+fig_size = plot.rcParams["figure.figsize"]
+fig_size[0] = 10
+fig_size[1] = 5
+fig = plot.figure()
+ax = fig.add_subplot(2,1,1)
+
+plot.rcParams["figure.figsize"] = fig_size
+plot.title('Memory Accesses')
+plot.ylabel('Normalized Memory range')
+plot.xlabel('Time')
+plot.grid(True)
+plot.autoscale(axis='x', tight=True)
+line, = ax.plot(Mem, color='blue', lw = 2)
+line1, = ax.plot(Mem_t, color='orange', lw =2)
+#line, = ax.plot(feature_2_train, color='blue', lw = 2)
+#line1, = ax.plot(feature_2_test, color='orange', lw =2)
+ax.set_yscale('log')
+plot.title('Time Series Memory Access Curve')
+plot.savefig('TS_Memory_train.png', dpi=300, bbox_inches='tight')
+plot.show()
+
+#
+# Plotting Code Segment:IP JVM {Interpreter + Hot Code}
+#
+
+fig_size = plot.rcParams["figure.figsize"]
+fig_size[0] = 10
+fig_size[1] = 5
+fig = plot.figure()
+ax = fig.add_subplot(2,1,1)
+
+plot.rcParams["figure.figsize"] = fig_size
+plot.title('Code Segment ')
+plot.ylabel('Normalized CS:IP range')
+plot.xlabel('Time')
+plot.grid(True)
+plot.autoscale(axis='x', tight=True)
+line, = ax.plot(CS, color='blue', lw = 2)
+line1, = ax.plot(CS_t, color='orange', lw =2)
+ax.set_yscale('log')
+plot.title('Time Series Code Segment:IP Curve')
+plot.savefig('TS_CS_IP.png', dpi=300, bbox_inches='tight')
+plot.show()
+
+
+
+##
+# Data Preprocessing
+##
+# Create numpy array of data.
+train_data = np.array(Mem)
+test_data = np.array(Mem_t)
+
+# Convert to float
+train_data_f = train_data.astype(np.float)
+test_data_f = test_data.astype(np.float)
+
+print(train_data_f)
+
+# Since there is quite a bit of variation in memory accesses
+# Let us do min/max scaling
+
+from sklearn.preprocessing import MinMaxScaler
+
+scaler = MinMaxScaler(feature_range=(-1, 1))
+train_data_f_normalized = scaler.fit_transform(train_data_f.reshape(-1, 1))
+
+# No need to implement normalization on test data.
+
+# Data validation 
+#print(train_data_f_normalized[:5], train_data_f_normalized[-5:])
+
+# Convert data to tensors.
+# PyTorch uses Tensors... (same as numpy array, only difference is Tensor can run on CPU or GPU)
+train_data_f_normalized = torch.FloatTensor(train_data_f_normalized).view(-1)
+
+# We need to setup a sequence window for training.
+# Starting with 250
+LSTM_training_window = 250
+
+# Now for PyTorch, we will label in put data in sequence of training window and + 1.
+def sequencer(data, window):
+    if data.size == 0 :
+        print('Fix data set')
+        return []
+    input_seq = []
+    Length = len(data)
+    for i in range(Length - window):
+        t_seq = data[i:i+window]
+        t_label = data[i+window:i+window+1]
+        input_seq.append((t_seq, t_label))
+    return input_seq
+
+# Create Sequence
+train_IO = sequencer(train_data_f_normalized, LSTM_training_window)
+
+# Data Validation
+#print(train_IO[:3])
+
+#### Data Preprocessing is complete...
+#### Create LSTM Model
+
+class LSTM(nn.Module):
+    def __init__(self, input_size=1, hidden_layer_size=100, output_size=1):
+        super().__init__()
+        self.hidden_layer_size = hidden_layer_size
+
+        self.lstm = nn.LSTM(input_size, hidden_layer_size)
+
+        self.linear = nn.Linear(hidden_layer_size, output_size)
+
+        self.hidden_cell = (torch.zeros(1,1,self.hidden_layer_size),
+                            torch.zeros(1,1,self.hidden_layer_size))
+
+    def forward(self, input_seq):
+        lstm_out, self.hidden_cell = self.lstm(input_seq.view(len(input_seq) ,1, -1), self.hidden_cell)
+        predictions = self.linear(lstm_out.view(len(input_seq), -1))
+        return predictions[-1]
+
+model = LSTM()
+loss_function = nn.MSELoss()
+optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+
+print(model)
+
+
+# Now let us train for epochs and test
+
+epochs = 3
+for i in range(epochs):
+    for seq, labels in train_IO:
+        optimizer.zero_grad()
+        model.hidden_cell = (torch.zeros(1,1, model.hidden_layer_size),
+                             torch.zeros(1,1,model.hidden_layer_size))
+
+        y_pred = model(seq)
+
+        single_loss = loss_function(y_pred, labels)
+        single_loss.backward()
+        optimizer.step()
+
+    if i%30 == 1:
+        print(f'epoch: {1:3} loss: {single_loss.item():10.8f}')
+
+print(f'epoch: {1:3} loss: {single_loss.item():10.10f}')
+
+# Making next 250 predictions.
+
+future_prediction_window = 250
+
+predicted_test_inputs = train_data_f_normalized[-LSTM_training_window:].tolist()
+#print(predicted_test_inputs)
+
+model.eval()
+
+for i in range(future_prediction_window):
+    seq = torch.FloatTensor(predicted_test_inputs[-LSTM_training_window:])
+    with torch.no_grad():
+        model.hidden = (torch.zeros(1, 1, model.hidden_layer_size),
+                        torch.zeros(1, 1, model.hidden_layer_size))
+        predicted_test_inputs.append(model(seq).item())
+
+# Normalized predicted values.
+#print(predicted_test_inputs[future_prediction_window:])
+
+# Do an inverse transform and plot
+predicted_memory_accesses = scaler.inverse_transform(np.array(predicted_test_inputs[LSTM_training_window:]).reshape(-1,1))
+#print(predicted_memory_accesses)
+
+x = np.arange(1750,2000,1)
+#print(x)
+
+#
+# Plotting Memory Access (JVM Running in 2 states, Steady state (Train), Terminating (Test)
+#
+fig_size = plot.rcParams["figure.figsize"]
+fig_size[0] = 10
+fig_size[1] = 5
+fig = plot.figure()
+ax = fig.add_subplot(2,1,1)
+ 
+plot.rcParams["figure.figsize"] = fig_size
+plot.title('Memory Accesses LSTM-RNN prediction')
+plot.ylabel('Normalized Memory range')
+plot.xlabel('Time')
+plot.grid(True)
+plot.autoscale(axis='x', tight=True)
+line, = ax.plot(Mem, color='blue', lw = 2)
+line1, = ax.plot(Mem_t, color='orange', lw =2)
+line2, = ax.plot(x, predicted_memory_accesses, color='green', lw =2)
+ax.set_yscale('log')
+plot.title('Time Series Memory Access Curve')
+plot.savefig('TS_Memory_train_LSTM.png', dpi=300, bbox_inches='tight')
+plot.show()
