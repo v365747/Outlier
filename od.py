@@ -39,6 +39,8 @@ CS = []
 Mem = []
 training_data = "train4.txt"
 test_data = "test4.txt"
+#training_data = "train.txt"
+#test_data = "test.txt"
 #training_data = "DLA_do_object_1.csv"
 #test_data = "DLA_OBJ_ITER_1.csv"
 
@@ -123,7 +125,6 @@ feature_2_train = d_train[:, [1]].reshape(-1,1)
 feature_1_test  = d_test[:, [0]].reshape(-1,1)
 feature_2_test  = d_test[:, [1]].reshape(-1,1)
 
-"""
 #scatter plot
 plot.scatter(feature_1_train,feature_2_train)
 plot.scatter(feature_1_test,feature_2_test)
@@ -134,6 +135,7 @@ plot.savefig('Feature.png', dpi=300, bbox_inches='tight')
 #plot.show()
 #exit()
 
+"""
 d_train_norm, d_test_norm = standardizer(d_train, d_test)
 train_scores = np.zeros([d_train.shape[0], n_clf])
 test_scores = np.zeros([d_test.shape[0], n_clf])
@@ -157,7 +159,7 @@ dy_test=[]
 # This is to label data as outlier for training... 
 #
 DMAX_OUTLIER_50k = 24299489320
-DMAX_OUTLIER_1M = 34299489320:
+#DMAX_OUTLIER_1M = 34299489320
 
 for i in range(len(Mem)):
     #if Mem[i] > DMAX_OUTLIER_1M:
@@ -237,7 +239,6 @@ evaluate_print(clf_name, dy_test, dy_test_scores)
 
 visualize(clf_name, d_train, dy_train, d_test, dy_test, dy_train_pred,
               dy_test_pred, show_figure=True, save_figure=True)
-
 """
 ##################
 # LSTM - PyTorch
